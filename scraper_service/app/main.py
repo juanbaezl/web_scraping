@@ -1,5 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
+from fastapi import FastAPI
 
 # Importaciones locales
 from app.settings.database import SessionLocal, engine, Base

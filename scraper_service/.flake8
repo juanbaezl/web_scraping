@@ -4,4 +4,4 @@ ignore = E203, E501, W503
 # E501: Línea demasiado larga (Black lo maneja)
 # W503: Salto de línea antes de operador binario (conflicto con Black)
 max-complexity = 10
-exclude = .git,__pycache__,migrations,venv
+exclude = .git,__pycache__,migrations,venv,__init__.py
