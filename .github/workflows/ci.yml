@@ -15,7 +15,7 @@ jobs:
     defaults:
       run:
         # Define el directorio de trabajo para todos los comandos 'run'
-        working-directory: ./services/scraper_service
+        working-directory: ./scraper_service
 
     steps:
       # Clona el repositorio
