@@ -66,7 +66,7 @@ jobs:
 
       # Construye la imagen de Docker
       - name: Build the Docker image
-        run: docker build -t scraper_service:latest ./services/scraper_service
+        run: docker build -t scraper_service:latest ./scraper_service
 
       # Escanea la imagen de Docker con Trivy
       - name: Scan Docker image with Trivy
