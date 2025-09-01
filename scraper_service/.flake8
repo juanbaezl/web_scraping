@@ -1,0 +1,7 @@
+[flake8]
+ignore = E203, E501, W503
+# E203: Espacio en blanco antes de ':' (conflicto con Black)
+# E501: Línea demasiado larga (Black lo maneja)
+# W503: Salto de línea antes de operador binario (conflicto con Black)
+max-complexity = 10
+exclude = .git,__pycache__,migrations,venv

@@ -1,0 +1,79 @@
+name: Python CI
+
+# Este workflow se ejecuta en cada push o pull request a la rama 'main' o 'dev'
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main", "dev"]
+
+jobs:
+  # --- TRABAJO 1: LINTING, PRUEBAS Y ESCANEO DE CÓDIGO ---
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        # Define el directorio de trabajo para todos los comandos 'run'
+        working-directory: ./services/scraper_service
+
+    steps:
+      # Clona el repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Configura el entorno de Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Instala las dependencias del proyecto
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install flake8 black pytest pip-audit bandit
+
+      # Ejecuta el Linter (Flake8) para revisar el estilo del código
+      - name: Lint with Flake8
+        run: flake8 app/ --count --show-source --statistics
+
+      # Ejecuta el Formateador (Black) para asegurar un estilo consistente
+      - name: Check formatting with Black
+        run: black app/ --check
+
+      # Ejecuta las pruebas (Pytest)
+      - name: Test with Pytest
+        run: pytest
+
+      # Escanea las dependencias en busca de vulnerabilidades
+      - name: Scan dependencies with pip-audit
+        run: pip-audit
+
+      # Escanea el código en busca de problemas de seguridad comunes
+      - name: Scan code with Bandit
+        run: bandit -r app/
+
+  build-and-scan-image:
+    # Este trabajo solo se ejecuta si 'lint-and-test' fue exitoso
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      # Clona el repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Construye la imagen de Docker
+      - name: Build the Docker image
+        run: docker-compose build scraper
+
+      # Escanea la imagen de Docker con Trivy
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "scraper:latest"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "HIGH,CRITICAL"

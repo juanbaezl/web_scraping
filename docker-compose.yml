@@ -1,0 +1,42 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Servicio de la Base de Datos
+  db:
+    image: postgres:13-alpine
+    container_name: library_db
+    environment:
+      POSTGRES_USER: dav
+      POSTGRES_PASSWORD: dav2025
+      POSTGRES_DB: openlibrary
+    volumes:
+      # Volumen para que los datos de la base de datos no se pierdan al reiniciar
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      # Expone el puerto de la base de datos
+      - "5432:5432"
+
+  # Servicio del Scraper y API con FastAPI
+  scraper:
+    build:
+      context: ./scraper_service
+    container_name: library_scraper
+    depends_on:
+      - db
+    environment:
+      #   URL de conexión a la base de datos
+      POSTGRES_USER: dav
+      POSTGRES_PASSWORD: dav2025
+      POSTGRES_DB: openlibrary
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./scraper_service/app:/scraper/app
+      - ./scraper_service/alembic:/scraper/alembic
+      - ./scraper_service/alembic.ini:/scraper/alembic.ini
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
