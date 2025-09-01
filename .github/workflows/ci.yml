@@ -66,13 +66,13 @@ jobs:
 
       # Construye la imagen de Docker
       - name: Build the Docker image
-        run: docker compose build scraper
+        run: docker build -t scraper_service:latest ./services/scraper_service
 
       # Escanea la imagen de Docker con Trivy
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "scraper:latest"
+          image-ref: "scraper_service:latest"
           format: "table"
           exit-code: "1"
           ignore-unfixed: true
