@@ -48,7 +48,7 @@ jobs:
 
       # Escanea las dependencias en busca de vulnerabilidades
       - name: Scan dependencies with pip-audit
-        run: pip-audit
+        run: pip-audit -r requirements.txt
 
       # Escanea el código en busca de problemas de seguridad comunes
       - name: Scan code with Bandit
