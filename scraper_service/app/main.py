@@ -1,7 +1,11 @@
 from fastapi import FastAPI
+from fastapi.params import Depends
+from requests import Session
 
 # Importaciones locales
+from app.models.subject import Subject
 from app.settings.database import SessionLocal, engine, Base
+from app.tasks.subject import SubjectScraper
 
 Base.metadata.create_all(bind=engine)
 
@@ -33,3 +37,11 @@ def get_db():
 def read_root():
     """Endpoint raíz para verificar que la API está en funcionamiento."""
     return {"status": "API en funcionamiento"}
+
+
+@app.get("/scrape/subjects")
+def scrape_subjects(db: Session = Depends(get_db)):
+    """Endpoint para obtener todos los géneros disponibles."""
+    subject_task = SubjectScraper(db)
+    subject_task.scrape_and_store_subjects()
+    return {"status": "Géneros extraídos y almacenados correctamente"}

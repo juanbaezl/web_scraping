@@ -21,9 +21,16 @@ book_subjects_association = Table(
 
 
 class Book(Base):
+    """Modelo que representa un libro en la base de datos.
+
+    Args:
+        Base : Hereda de la base declarativa de SQLAlchemy.
+    """
+
     __tablename__ = "books"
 
     id = Column(Integer, primary_key=True, index=True)
+    open_library_id = Column(String, unique=True, index=True)
     title = Column(String, index=True)
     publish_year = Column(Integer, nullable=True)
     pages = Column(Integer, nullable=True)
