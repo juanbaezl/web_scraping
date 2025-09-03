@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
+from app.utils.constants import BASE_URL, HEADERS, SUBJECTS_QUERY
 from app.models.subject import Subject
 
 
@@ -15,8 +16,6 @@ class SubjectScraper:
         scrape_and_store_subjects: Extrae los géneros y los almacena en la base de datos.
     """
 
-    BASE_URL = "https://openlibrary.org/subjects"
-
     def __init__(self, db: Session):
         """Inicializa el scraper de géneros.
 
@@ -27,25 +26,24 @@ class SubjectScraper:
 
     def scrape_and_store_subjects(self):
         """Extrae los géneros de la página de Open Library y los almacena en la base de datos."""
-        headers = {"Accept-Language": "es"}
-        response = requests.get(self.BASE_URL, headers=headers)
+        response = requests.get(f"{BASE_URL}/subjects", headers=HEADERS)
         if response.status_code != 200:
-            raise Exception(
-                f"Error al acceder a {self.BASE_URL}: {response.status_code}"
-            )
+            raise Exception(f"Error al acceder a {BASE_URL}: {response.status_code}")
 
         soup = BeautifulSoup(response.content, "html.parser")
-        subject_elements = soup.select("div#subjectsPage li a:not([href*='language'])")
+        subject_elements = soup.select(SUBJECTS_QUERY)
+        unique_subjects = set()
         for element in subject_elements:
             subject_name = element.get_text(strip=True)
-            # if subject_name:
-            # Verificar si el género ya existe en la base de datos
-            # existing_subject = (
-        #             self.db.query(Subject).filter(Subject.name == subject_name).first()
-        #         )
-        #         if not existing_subject:
-        #             new_subject = Subject(name=subject_name)
-        #             self.db.add(new_subject)
+            if subject_name:
+                # Verificar si el género ya existe en la base de datos
+                existing_subject = (
+                    self.db.query(Subject).filter(Subject.name == subject_name).first()
+                )
+                if not existing_subject and subject_name not in unique_subjects:
+                    new_subject = Subject(name=subject_name)
+                    self.db.add(new_subject)
+                    unique_subjects.add(subject_name)
 
-        # self.db.commit()
-        # self.db.close()
+        self.db.commit()
+        self.db.close()

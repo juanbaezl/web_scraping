@@ -20,6 +20,3 @@ class Author(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-
-    # Relación uno a muchos: Un autor puede tener muchos libros.
-    books = relationship("Book", back_populates="author")

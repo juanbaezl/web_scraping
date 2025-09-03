@@ -5,6 +5,7 @@ from requests import Session
 # Importaciones locales
 from app.models.subject import Subject
 from app.settings.database import SessionLocal, engine, Base
+from app.tasks.book import BookScraper
 from app.tasks.subject import SubjectScraper
 
 Base.metadata.create_all(bind=engine)
@@ -45,3 +46,13 @@ def scrape_subjects(db: Session = Depends(get_db)):
     subject_task = SubjectScraper(db)
     subject_task.scrape_and_store_subjects()
     return {"status": "Géneros extraídos y almacenados correctamente"}
+
+
+@app.get("/scrape/books/{book_id}")
+def scrape_book(book_id: int, db: Session = Depends(get_db)):
+    """Endpoint para extraer información de un libro específico."""
+    book_service = BookScraper(db)
+    book_info = book_service.scrape_single_book(book_id)
+    if book_info:
+        return {"status": "Libro extraído correctamente", "data": book_info}
+    return {"status": "Error al extraer el libro"}
