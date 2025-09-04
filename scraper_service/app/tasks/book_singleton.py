@@ -80,7 +80,7 @@ class BookSingleton:
                 try:
                     db.bulk_insert_mappings(Book, new_books)
                     db.flush()
-                except (IntegrityError, UniqueViolation) as e:
+                except (IntegrityError, UniqueViolation):
                     savepoint.rollback()
         return db.query(Book).filter(Book.open_library_id.in_(ids)).all()
 

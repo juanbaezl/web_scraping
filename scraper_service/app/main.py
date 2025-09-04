@@ -4,15 +4,15 @@ from requests import Session
 import time
 import logging
 
+# Importaciones locales
+from app.settings.database import SessionLocal, engine, Base
+from app.tasks.book import BookScraper
+from app.tasks.subject import SubjectScraper
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Importaciones locales
-from app.models.subject import Subject
-from app.settings.database import SessionLocal, engine, Base
-from app.tasks.book import BookScraper
-from app.tasks.subject import SubjectScraper
 
 Base.metadata.create_all(bind=engine)
 
