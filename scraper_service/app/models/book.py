@@ -43,8 +43,12 @@ class Book(Base):
     publish_year = Column(Integer, nullable=True)
     pages = Column(Integer, nullable=True)
     language = Column(String, nullable=True)
-    description = Column(Text, nullable=True)
+    publisher = Column(Text, nullable=True)
     rating = Column(Float, nullable=True)
+    rating_count = Column(Integer, nullable=True)
+    want_to_read_count = Column(Integer, nullable=True)
+    read_count = Column(Integer, nullable=True)
+    currently_reading_count = Column(Integer, nullable=True)
     # Relación muchos a muchos: Muchos libros pueden tener muchos autores.
     authors = relationship(
         "Author", secondary=book_authors_association, backref="books"

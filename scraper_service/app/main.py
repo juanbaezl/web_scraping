@@ -52,7 +52,7 @@ def scrape_subjects(db: Session = Depends(get_db)):
 def scrape_book(book_id: int, db: Session = Depends(get_db)):
     """Endpoint para extraer información de un libro específico."""
     book_service = BookScraper(db)
-    book_info = book_service.scrape_single_book(book_id)
+    book_info = book_service.scrape_single_book(book_id, create_in_db=False)
     if book_info:
         return {"status": "Libro extraído correctamente", "data": book_info}
     return {"status": "Error al extraer el libro"}

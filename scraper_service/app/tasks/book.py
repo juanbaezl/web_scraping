@@ -23,9 +23,10 @@ from app.utils.constants import (
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.tasks.author_singleton import author_singleton
 from app.tasks.subject_singleton import subject_singleton
+from app.utils.numbers import get_integer, get_float
 
 # Importa todos los modelos necesarios
-from app.models import Book, Subject
+from app.models import Book
 
 
 class BookScraper:
@@ -43,58 +44,232 @@ class BookScraper:
         """
         self.db = db
 
-    def scrape_single_book(self, book_id: int) -> dict:
-        """
-        Extrae la información de un solo libro dado su ID.
-        Args:
-            book_id (int): El ID del libro en Open Library.
-        Returns:
-            dict: Un diccionario con la información del libro.
-        """
-        url = f"{BASE_URL}/books/OL{book_id}M"
-        response = requests.get(url, headers=HEADERS)
-        if response.status_code != 200:
-            print(f"Error al acceder a {url}: {response.status_code}")
-            return None
+    def _scrap_title(self, soup: BeautifulSoup) -> str:
+        """Extrae el título del libro.
 
-        soup = BeautifulSoup(response.content, "html.parser")
-        # Extrae el título
-        title = soup.select_one(BOOKS_NAME_QUERY).get_text(strip=True)
-        # Extrae los autores
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: El título del libro.
+        """
+        title = soup.select_one(BOOKS_NAME_QUERY)
+        return title.get_text(strip=True) if title else "Desconocido"
+
+    def _scrap_authors(self, soup: BeautifulSoup, create_in_db: bool = True) -> set:
+        """
+        Extrae los autores del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+            create_in_db (bool): Indica si se deben crear los autores en la base de datos si no existen.
+
+        Returns:
+            set: Un conjunto de IDs de autores o nombres de autores.
+        """
         authors_scrap = soup.select(BOOKS_AUTHOR_QUERY)
         authors = set()
         for author in authors_scrap:
             author_name = author.get_text(strip=True)
-            # author_db = author_singleton.get_or_create_author(author_name, self.db)
-            authors.add(author_name)
-        # Extrae los géneros
+            author_db = (
+                author_singleton.get_or_create_author(author_name, self.db)
+                if create_in_db
+                else None
+            )
+            (
+                authors.add(author_db)
+                if author_db
+                else None if create_in_db else authors.add(author_name)
+            )
+        return authors
+
+    def _scrap_subjects(self, soup: BeautifulSoup, create_in_db: bool = True) -> set:
+        """
+        Extrae los géneros del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            set: Un conjunto de IDs de géneros.
+        """
         subjects_scrap = soup.select(BOOKS_SUBJECT_QUERY)
         subjects = set()
         for subject in subjects_scrap:
             subject_name = subject.get_text(strip=True)
             subject_db = subject_singleton.get_subject(subject_name, self.db)
-            subjects.add(subject_db.id) if subject_db else None
-        # Extrae items generales
+            (
+                subjects.add(subject_db)
+                if subject_db
+                else None if create_in_db else subjects.add(subject_name)
+            )
+        return subjects
+
+    def _scrap_language(self, soup: BeautifulSoup) -> str:
+        """
+        Extrae el idioma del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: El idioma del libro.
+        """
+        language = soup.select_one(BOOKS_LANGUAGE_QUERY)
+        return language.get_text(strip=True) if language else "Desconocido"
+
+    def _scrap_publish_date(self, soup: BeautifulSoup) -> str:
+        """
+        Extrae la fecha de publicacion del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: la fecha de publicacion del libro.
+        """
+        publish_date = soup.select_one(BOOKS_PUBLISH_DATE_QUERY)
+        return publish_date.get_text(strip=True) if publish_date else "Desconocido"
+
+    def _scrap_publisher(self, soup: BeautifulSoup) -> str:
+        """
+        Extrae la editorial del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: la editorial del libro.
+        """
+        publisher = soup.select_one(BOOKS_PUBLISHER_QUERY)
+        return publisher.get_text(strip=True) if publisher else "Desconocido"
+
+    def _scrap_pages(self, soup: BeautifulSoup) -> str:
+        """
+        Extrae el número de páginas del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: el número de páginas del libro.
+        """
+        pages = soup.select_one(BOOKS_PAGES_QUERY)
+        return pages.get_text(strip=True) if pages else "Desconocido"
+
+    def _scrap_general_items(self, soup: BeautifulSoup) -> tuple:
+        """
+        Extrae los items generales del libro como el idioma, la fecha de publicación, la editorial y el número de páginas.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            tuple: Una tupla con el idioma, la fecha de publicación, la editorial y el número de páginas.
+        """
         general_items = soup.select_one(BOOKS_ITEMS_QUERY)
         language = None
         publish_date = None
         publisher = None
+        pages = None
         if general_items:
-            # Extrae el idioma
-            language = general_items.select_one(BOOKS_LANGUAGE_QUERY)
-            language = language.get_text(strip=True) if language else "Desconocido"
-            # extrae la fecha de publicación
-            publish_date = general_items.select_one(BOOKS_PUBLISH_DATE_QUERY)
-            publish_date = (
-                publish_date.get_text(strip=True) if publish_date else "Desconocido"
-            )
-            # extrae la editorial del libro
-            publisher = general_items.select_one(BOOKS_PUBLISHER_QUERY)
-            publisher = publisher.get_text(strip=True) if publisher else "Desconocido"
-            # extrae las páginas del libro
-            pages = general_items.select_one(BOOKS_PAGES_QUERY)
-            pages = pages.get_text(strip=True) if pages else "Desconocido"
+            language = self._scrap_language(general_items)
+            publish_date = self._scrap_publish_date(general_items)
+            publisher = self._scrap_publisher(general_items)
+            pages = self._scrap_pages(general_items)
+        return language, publish_date, publisher, pages
 
+    def _scrap_rating_value(self, soup: BeautifulSoup) -> float:
+        """
+        Extrae la valoración del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            float: La valoración del libro.
+        """
+        rating_value = soup.select_one(BOOKS_RATING_VALUE_QUERY)
+        return (
+            get_float(rating_value["content"])
+            if rating_value and "content" in rating_value.attrs
+            else 0.0
+        )
+
+    def _scrap_rating_count(self, soup: BeautifulSoup) -> int:
+        """
+        Extrae el número de valoraciones del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            int: El número de valoraciones del libro.
+        """
+        rating_count = soup.select_one(BOOKS_RATING_COUNT_QUERY)
+        return (
+            get_integer(rating_count["content"])
+            if rating_count and "content" in rating_count.attrs
+            else 0
+        )
+
+    def _scrap_want_to_read_count(self, soup: BeautifulSoup) -> int:
+        """
+        Extrae el número de usuarios que quieren leer el libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            int: El número de usuarios que quieren leer el libro.
+        """
+        want_to_read_count = soup.select_one(BOOKS_WANT_TO_READ_COUNT_QUERY)
+        return (
+            get_integer(want_to_read_count.get_text(strip=True))
+            if want_to_read_count
+            else 0
+        )
+
+    def _scrap_read_count(self, soup: BeautifulSoup) -> int:
+        """
+        Extrae el número de usuarios que han leído el libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            int: El número de usuarios que han leído el libro.
+        """
+        read_count = soup.select_one(BOOKS_READ_COUNT_QUERY)
+        return get_integer(read_count.get_text(strip=True)) if read_count else 0
+
+    def _scrap_currently_reading_count(self, soup: BeautifulSoup) -> int:
+        """
+        Extrae el número de usuarios que están leyendo el libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            int: El número de usuarios que están leyendo el libro.
+        """
+        currently_reading_count = soup.select_one(BOOKS_CURRENTLY_READING_COUNT_QUERY)
+        return (
+            get_integer(currently_reading_count.get_text(strip=True))
+            if currently_reading_count
+            else 0
+        )
+
+    def _scrap_stats(self, soup: BeautifulSoup) -> tuple:
+        """
+        Extrae las estadísticas del libro como la valoración, el número de valoraciones, el número de usuarios que quieren leer el libro, el número de usuarios que han leído el libro y el número de usuarios que están leyendo el libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            tuple: Una tupla con la valoración, el número de valoraciones, el número de usuarios que quieren leer el libro, el número de usuarios que han leído el libro y el número de usuarios que están leyendo el libro.
+        """
         stats = soup.select_one(BOOKS_STATS_QUERY)
         rating_value = None
         rating_count = None
@@ -102,47 +277,122 @@ class BookScraper:
         read_count = None
         currently_reading_count = None
         if stats:
-            # Extrae la valoración del libro
-            rating_value = stats.select_one(BOOKS_RATING_VALUE_QUERY)
-            rating_value = rating_value["content"] if rating_value else "0"
-            # Extrae el número de valoraciones
-            rating_count = stats.select_one(BOOKS_RATING_COUNT_QUERY)
-            rating_count = rating_count["content"] if rating_count else "0"
-            # Extrae el número de usuarios que quieren leer el libro
-            want_to_read_count = soup.select_one(BOOKS_WANT_TO_READ_COUNT_QUERY)
-            want_to_read_count = (
-                want_to_read_count.get_text(strip=True) if want_to_read_count else "0"
-            )
-            # Extrae el número de usuarios que han leído el libro
-            read_count = soup.select_one(BOOKS_READ_COUNT_QUERY)
-            read_count = read_count.get_text(strip=True) if read_count else "0"
-            # Extrae el número de usuarios que están leyendo el libro
-            currently_reading_count = soup.select_one(
-                BOOKS_CURRENTLY_READING_COUNT_QUERY
-            )
-            currently_reading_count = (
-                currently_reading_count.get_text(strip=True)
-                if currently_reading_count
-                else "0"
-            )
-        # Extrae el ID del trabajo
+            rating_value = self._scrap_rating_value(soup)
+            rating_count = self._scrap_rating_count(soup)
+            want_to_read_count = self._scrap_want_to_read_count(soup)
+            read_count = self._scrap_read_count(soup)
+            currently_reading_count = self._scrap_currently_reading_count(soup)
+        return (
+            rating_value,
+            rating_count,
+            want_to_read_count,
+            read_count,
+            currently_reading_count,
+        )
+
+    def _scrap_working_id(self, soup: BeautifulSoup) -> str:
+        """
+        Extrae el ID del trabajo del libro.
+
+        Args:
+            soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
+
+        Returns:
+            str: El ID del trabajo del libro.
+        """
         working_id = soup.select_one(BOOKS_WORKING_ID_QUERY)
-        working_id = working_id.get_text(strip=True) if working_id else "Desconocido"
+        return working_id.get_text(strip=True) if working_id else "Desconocido"
+
+    def scrape_single_book(self, book_id: int, create_in_db: bool = True) -> dict:
+        """
+        Extrae la información de un solo libro dado su ID.
+        Args:
+            book_id (int): El ID del libro en Open Library.
+        Returns:
+            dict: Un diccionario con la información del libro.
+        """
+        open_library_id = f"OL{book_id}M"
+        url = f"{BASE_URL}/books/{open_library_id}"
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code != 200:
+            print(f"Error al acceder a {url}: {response.status_code}")
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        title = self._scrap_title(soup)
+        authors = self._scrap_authors(soup, create_in_db=create_in_db)
+        subjects = self._scrap_subjects(soup, create_in_db=create_in_db)
+        language, publish_date, publisher, pages = self._scrap_general_items(soup)
+
+        (
+            rating_value,
+            rating_count,
+            want_to_read_count,
+            read_count,
+            currently_reading_count,
+        ) = self._scrap_stats(soup)
+        working_id = self._scrap_working_id(soup)
 
         return {
             "title": title,
             "authors": authors,
             "subjects": subjects,
-            "language": language if language else None,
-            "publish_date": publish_date if publish_date else None,
-            "publisher": publisher if publisher else None,
-            "pages": pages if pages else None,
-            "rating_value": rating_value if rating_value else None,
-            "rating_count": rating_count if rating_count else None,
-            "want_to_read_count": want_to_read_count if want_to_read_count else None,
-            "read_count": read_count if read_count else None,
-            "currently_reading_count": (
-                currently_reading_count if currently_reading_count else None
-            ),
-            "working_id": working_id if working_id else None,
+            "language": language,
+            "publish_date": publish_date,
+            "publisher": publisher,
+            "pages": pages,
+            "rating_value": rating_value,
+            "rating_count": rating_count,
+            "want_to_read_count": want_to_read_count,
+            "read_count": read_count,
+            "currently_reading_count": currently_reading_count,
+            "working_id": working_id,
+            "open_library_id": open_library_id,
         }
+
+    def _store_scraped_data(self, book_data: dict):
+        if not book_data:
+            return
+
+        new_book = Book(
+            open_library_id=book_data["open_library_id"],
+            work_id=book_data["working_id"],
+            title=book_data["title"],
+            publish_year=book_data["publish_date"],
+            pages=book_data["pages"],
+            language=book_data["language"],
+            publisher=book_data["publisher"],
+            authors=book_data["authors"],
+            subjects=book_data["subjects"],
+            rating=book_data["rating_value"],
+            rating_count=book_data["rating_count"],
+            want_to_read_count=book_data["want_to_read_count"],
+            read_count=book_data["read_count"],
+            currently_reading_count=book_data["currently_reading_count"],
+        )
+        self.db.add(new_book)
+
+    def scrape_and_store_books_by_id_range(
+        self, start_id: int, end_id: int, batch_size: int = 100, num_threads: int = 5
+    ):
+        total_books_added = 0
+        for i in range(start_id, end_id, batch_size):
+            id_batch = list(range(i, min(i + batch_size), end_id))
+            print(f"Procesando batch de IDs: {id_batch[0]} a {id_batch[-1]}...")
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                results = [
+                    executor.submit(self.scrape_single_book, book_id)
+                    for book_id in id_batch
+                ]
+                for future in as_completed(results):
+                    book_data = future.result()
+                    if book_data:
+                        self._store_scraped_data(book_data)
+                        total_books_added += 1
+            try:
+                self.db.commit()
+                print(f"Se han agregado {total_books_added} a la base de datos")
+            except Exception as e:
+                print(f"Error al hacer commit del batch: {e}")
+                self.db.rollback()
+        print(f"Total de libros añadidos: {total_books_added}")
