@@ -29,6 +29,7 @@ from app.utils.numbers import get_integer, get_float
 
 # Importa todos los modelos necesarios
 from app.models import Book
+from app.models.book import book_authors_association, book_subjects_association
 
 
 class BookScraper:
@@ -358,6 +359,12 @@ class BookScraper:
         }
 
     def _store_scraped_data(self, book_data: dict):
+        """
+        Almacena los datos de un libro en la base de datos.
+
+        Args:
+            book_data (dict): Los datos del libro a almacenar.
+        """
         if not book_data:
             return
 
@@ -380,14 +387,26 @@ class BookScraper:
         self.db.add(new_book)
 
     def scrape_and_store_books_by_id_range(
-        self, start_id: int, end_id: int, batch_size: int = 100, num_threads: int = 5
+        self,
+        start_id: int,
+        end_id: int,
+        batch_size: int = 100,
+        num_threads: int = 5,
     ):
+        """
+        Extrae y almacena libros en la base de datos en un rango de IDs especificado.
+
+        Args:
+            start_id (int): ID de inicio del rango.
+            end_id (int): ID de fin del rango.
+            batch_size (int, optional): Tamaño del batch para la extracción. Defaults to 100.
+            num_threads (int, optional): Número de hilos a utilizar para la extracción. Defaults to 5.
+        """
         total_books_added = 0
         for i in range(start_id, end_id, batch_size):
             id_batch = list(range(i, min(i + batch_size, end_id)))
             logging.info(f"Procesando batch de IDs: {id_batch[0]} a {id_batch[-1]}...")
             scraped_books = []
-            authors = set()
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
 
                 results = [
@@ -398,7 +417,6 @@ class BookScraper:
                     book_data = future.result()
                     if book_data:
                         scraped_books.append(book_data)
-                        authors.update(book_data["authors"])
                         total_books_added += 1
             try:
                 book_author_relations = []
@@ -415,20 +433,20 @@ class BookScraper:
                     )
                     book_subject_relations.extend(
                         [
-                            {"book_id": book_data["id"], "subject": subject.id}
+                            {"book_id": book_data["id"], "subject_id": subject.id}
                             for subject in book_data["subjects"]
                         ]
                     )
                 book_singleton.bulk_create_books(scraped_books, self.db)
-                logging.info(book_author_relations)
                 if len(book_author_relations):
                     self.db.execute(
-                        book_author_relations.insert(), book_author_relations
+                        book_authors_association.insert(), book_author_relations
                     )
                 if len(book_subject_relations):
                     self.db.execute(
-                        book_subject_relations.insert(), book_subject_relations
+                        book_subjects_association.insert(), book_subject_relations
                     )
+                self.db.commit()
                 logging.info(f"Se han agregado {total_books_added} a la base de datos")
             except Exception as e:
                 logging.error(f"Error al hacer commit del batch: {e}")
