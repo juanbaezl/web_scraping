@@ -26,7 +26,7 @@ class SubjectScraper:
 
     def scrape_and_store_subjects(self):
         """Extrae los géneros de la página de Open Library y los almacena en la base de datos."""
-        response = requests.get(f"{BASE_URL}/subjects", headers=HEADERS)
+        response = requests.get(f"{BASE_URL}/subjects", headers=HEADERS, timeout=20)
         if response.status_code != 200:
             raise Exception(f"Error al acceder a {BASE_URL}: {response.status_code}")
 

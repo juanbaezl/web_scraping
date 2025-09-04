@@ -56,7 +56,7 @@ class BookSingleton:
                     db.add(book)
                     db.flush()
                     return book
-                except (IntegrityError, UniqueViolation) as e:
+                except (IntegrityError, UniqueViolation):
                     savepoint.rollback()
 
     def bulk_create_books(self, books_data: list[dict], db: Session):
