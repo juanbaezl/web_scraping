@@ -4,8 +4,6 @@ from sqlalchemy import (
     String,
 )
 
-from sqlalchemy.orm import relationship
-
 from app.settings.database import Base
 
 

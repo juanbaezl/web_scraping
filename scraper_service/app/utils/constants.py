@@ -3,10 +3,10 @@ BASE_URL = "https://openlibrary.org"
 HEADERS = {"Accept-Language": "es"}
 
 # Soup queries
-## Subjects
+# Subjects
 SUBJECTS_QUERY = "div#subjectsPage a[href*='/subjects/']"
 
-## Books
+# Books
 BOOKS_NAME_QUERY = "h1.work-title"
 BOOKS_AUTHOR_QUERY = "h2.edition-byline a[itemprop*='author']"
 BOOKS_SUBJECT_QUERY = "div.subjects-content a[href*='/subjects/']"

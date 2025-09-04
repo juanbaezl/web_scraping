@@ -63,7 +63,7 @@ class AuthorSingleton:
                 try:
                     db.bulk_insert_mappings(Author, new_authors)
                     db.flush()
-                except (IntegrityError, UniqueViolation) as e:
+                except (IntegrityError, UniqueViolation):
                     savepoint.rollback()
         return db.query(Author).filter(Author.name.in_(authors)).all()
 
