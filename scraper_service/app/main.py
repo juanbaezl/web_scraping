@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.params import Depends
 from requests import Session
+import time
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Importaciones locales
 from app.models.subject import Subject
@@ -67,8 +73,14 @@ def scrape_books(
     db: Session = Depends(get_db),
 ):
     """Endpoint para extraer información de múltiples libros."""
+    start_time = time.perf_counter()
     book_service = BookScraper(db)
     book_service.scrape_and_store_books_by_id_range(
         start_id, end_id, batch_size, num_threads
     )
-    return {"status": "Libros extraídos y almacenados correctamente"}
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    return {
+        "status": "Libros extraídos y almacenados correctamente",
+        "duration_seconds": round(elapsed_time, 2),
+    }

@@ -1,4 +1,4 @@
-from pydantic import Tag
+import logging
 import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
@@ -126,7 +126,7 @@ class BookScraper:
             str: la fecha de publicacion del libro.
         """
         publish_date = soup.select_one(BOOKS_PUBLISH_DATE_QUERY)
-        return publish_date.get_text(strip=True) if publish_date else "Desconocido"
+        return get_integer(publish_date.get_text(strip=True)) if publish_date else -1
 
     def _scrap_publisher(self, soup: BeautifulSoup) -> str:
         """
@@ -152,7 +152,7 @@ class BookScraper:
             str: el número de páginas del libro.
         """
         pages = soup.select_one(BOOKS_PAGES_QUERY)
-        return pages.get_text(strip=True) if pages else "Desconocido"
+        return get_integer(pages.get_text(strip=True)) if pages else -1
 
     def _scrap_general_items(self, soup: BeautifulSoup) -> tuple:
         """
@@ -321,7 +321,7 @@ class BookScraper:
         url = f"{BASE_URL}/books/{open_library_id}"
         response = requests.get(url, headers=HEADERS)
         if response.status_code != 200:
-            print(f"Error al acceder a {url}: {response.status_code}")
+            logging.error(f"Error al acceder a {url}: {response.status_code}")
             return None
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -340,19 +340,20 @@ class BookScraper:
         working_id = self._scrap_working_id(soup)
 
         return {
+            "id": book_id,
             "title": title,
             "authors": authors,
             "subjects": subjects,
             "language": language,
-            "publish_date": publish_date,
+            "publish_year": publish_date,
             "publisher": publisher,
             "pages": pages,
-            "rating_value": rating_value,
+            "rating": rating_value,
             "rating_count": rating_count,
             "want_to_read_count": want_to_read_count,
             "read_count": read_count,
             "currently_reading_count": currently_reading_count,
-            "working_id": working_id,
+            "work_id": working_id,
             "open_library_id": open_library_id,
         }
 
@@ -384,8 +385,9 @@ class BookScraper:
         total_books_added = 0
         for i in range(start_id, end_id, batch_size):
             id_batch = list(range(i, min(i + batch_size, end_id)))
-            print(f"Procesando batch de IDs: {id_batch[0]} a {id_batch[-1]}...")
+            logging.info(f"Procesando batch de IDs: {id_batch[0]} a {id_batch[-1]}...")
             scraped_books = []
+            authors = set()
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
 
                 results = [
@@ -396,19 +398,39 @@ class BookScraper:
                     book_data = future.result()
                     if book_data:
                         scraped_books.append(book_data)
+                        authors.update(book_data["authors"])
                         total_books_added += 1
             try:
-                for book in scraped_books:
-                    authors = set()
-                    for author in book["authors"]:
-                        authors.add(
-                            author_singleton.get_or_create_author(author, self.db)
-                        )
-                    book["authors"] = authors
-                    book_singleton.create_book(book, self.db)
-                self.db.commit()
-                print(f"Se han agregado {total_books_added} a la base de datos")
+                book_author_relations = []
+                book_subject_relations = []
+                for book_data in scraped_books:
+                    book_data["authors"] = author_singleton.bulk_get_or_create_author(
+                        list(book_data["authors"]), self.db
+                    )
+                    book_author_relations.extend(
+                        [
+                            {"book_id": book_data["id"], "author_id": author.id}
+                            for author in book_data["authors"]
+                        ]
+                    )
+                    book_subject_relations.extend(
+                        [
+                            {"book_id": book_data["id"], "subject": subject.id}
+                            for subject in book_data["subjects"]
+                        ]
+                    )
+                book_singleton.bulk_create_books(scraped_books, self.db)
+                logging.info(book_author_relations)
+                if len(book_author_relations):
+                    self.db.execute(
+                        book_author_relations.insert(), book_author_relations
+                    )
+                if len(book_subject_relations):
+                    self.db.execute(
+                        book_subject_relations.insert(), book_subject_relations
+                    )
+                logging.info(f"Se han agregado {total_books_added} a la base de datos")
             except Exception as e:
-                print(f"Error al hacer commit del batch: {e}")
+                logging.error(f"Error al hacer commit del batch: {e}")
                 self.db.rollback()
-        print(f"Total de libros añadidos: {total_books_added}")
+        logging.info(f"Total de libros añadidos: {total_books_added}")

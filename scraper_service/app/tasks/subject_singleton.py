@@ -1,5 +1,6 @@
 from functools import lru_cache
 from sqlalchemy.orm import Session
+import logging
 
 from app.models.subject import Subject
 
@@ -10,7 +11,7 @@ class SubjectSingleton:
     """
 
     def __init__(self):
-        print("SubjectSingleton iniciado")
+        logging.info("SubjectSingleton iniciado")
 
     @lru_cache(maxsize=64)
     def get_subject(self, subject_name: str, db: Session) -> Subject:
