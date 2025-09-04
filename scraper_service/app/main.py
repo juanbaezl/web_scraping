@@ -56,3 +56,19 @@ def scrape_book(book_id: int, db: Session = Depends(get_db)):
     if book_info:
         return {"status": "Libro extraído correctamente", "data": book_info}
     return {"status": "Error al extraer el libro"}
+
+
+@app.get("/scrape/books")
+def scrape_books(
+    start_id: int,
+    end_id: int,
+    batch_size: int,
+    num_threads: int,
+    db: Session = Depends(get_db),
+):
+    """Endpoint para extraer información de múltiples libros."""
+    book_service = BookScraper(db)
+    book_service.scrape_and_store_books_by_id_range(
+        start_id, end_id, batch_size, num_threads
+    )
+    return {"status": "Libros extraídos y almacenados correctamente"}

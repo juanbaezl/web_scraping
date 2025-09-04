@@ -28,15 +28,16 @@ class AuthorSingleton:
         """
         author = db.query(Author).filter(Author.name == author_name).first()
         if not author:
-            try:
-                author = Author(name=author_name)
-                db.add(author)
-                db.flush()
-                return author
-            except (IntegrityError, UniqueViolation) as e:
-                db.rollback()
-                author = db.query(Author).filter(Author.name == author_name).one()
-                return author
+            with db.begin_nested() as savepoint:
+                try:
+                    author = Author(name=author_name)
+                    db.add(author)
+                    db.flush()
+                    return author
+                except (IntegrityError, UniqueViolation) as e:
+                    savepoint.rollback()
+                    author = db.query(Author).filter(Author.name == author_name).one()
+                    return author
 
         return author
 

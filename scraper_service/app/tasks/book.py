@@ -1,3 +1,4 @@
+from pydantic import Tag
 import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ from app.utils.constants import (
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.tasks.author_singleton import author_singleton
 from app.tasks.subject_singleton import subject_singleton
+from app.tasks.book_singleton import book_singleton
 from app.utils.numbers import get_integer, get_float
 
 # Importa todos los modelos necesarios
@@ -56,13 +58,12 @@ class BookScraper:
         title = soup.select_one(BOOKS_NAME_QUERY)
         return title.get_text(strip=True) if title else "Desconocido"
 
-    def _scrap_authors(self, soup: BeautifulSoup, create_in_db: bool = True) -> set:
+    def _scrap_authors(self, soup: BeautifulSoup) -> set:
         """
         Extrae los autores del libro.
 
         Args:
             soup (BeautifulSoup): El objeto BeautifulSoup que representa la página del libro.
-            create_in_db (bool): Indica si se deben crear los autores en la base de datos si no existen.
 
         Returns:
             set: Un conjunto de IDs de autores o nombres de autores.
@@ -71,17 +72,8 @@ class BookScraper:
         authors = set()
         for author in authors_scrap:
             author_name = author.get_text(strip=True)
-            author_db = (
-                author_singleton.get_or_create_author(author_name, self.db)
-                if create_in_db
-                else None
-            )
-            (
-                authors.add(author_db)
-                if author_db
-                else None if create_in_db else authors.add(author_name)
-            )
-        return authors
+            authors.add(author_name)
+        return authors if len(authors) > 0 else ["Desconocido"]
 
     def _scrap_subjects(self, soup: BeautifulSoup, create_in_db: bool = True) -> set:
         """
@@ -94,9 +86,14 @@ class BookScraper:
             set: Un conjunto de IDs de géneros.
         """
         subjects_scrap = soup.select(BOOKS_SUBJECT_QUERY)
+        subjects_scrap = subjects_scrap if subjects_scrap else ["Desconocido"]
         subjects = set()
         for subject in subjects_scrap:
-            subject_name = subject.get_text(strip=True)
+            subject_name = (
+                subject.get_text(strip=True)
+                if not isinstance(subject, str)
+                else subject
+            )
             subject_db = subject_singleton.get_subject(subject_name, self.db)
             (
                 subjects.add(subject_db)
@@ -312,6 +309,15 @@ class BookScraper:
             dict: Un diccionario con la información del libro.
         """
         open_library_id = f"OL{book_id}M"
+
+        if create_in_db:
+            existing_book = (
+                self.db.query(Book)
+                .filter(Book.open_library_id == open_library_id)
+                .first()
+            )
+            if existing_book:
+                return None
         url = f"{BASE_URL}/books/{open_library_id}"
         response = requests.get(url, headers=HEADERS)
         if response.status_code != 200:
@@ -320,7 +326,7 @@ class BookScraper:
 
         soup = BeautifulSoup(response.content, "html.parser")
         title = self._scrap_title(soup)
-        authors = self._scrap_authors(soup, create_in_db=create_in_db)
+        authors = self._scrap_authors(soup)
         subjects = self._scrap_subjects(soup, create_in_db=create_in_db)
         language, publish_date, publisher, pages = self._scrap_general_items(soup)
 
@@ -377,9 +383,11 @@ class BookScraper:
     ):
         total_books_added = 0
         for i in range(start_id, end_id, batch_size):
-            id_batch = list(range(i, min(i + batch_size), end_id))
+            id_batch = list(range(i, min(i + batch_size, end_id)))
             print(f"Procesando batch de IDs: {id_batch[0]} a {id_batch[-1]}...")
+            scraped_books = []
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
+
                 results = [
                     executor.submit(self.scrape_single_book, book_id)
                     for book_id in id_batch
@@ -387,9 +395,17 @@ class BookScraper:
                 for future in as_completed(results):
                     book_data = future.result()
                     if book_data:
-                        self._store_scraped_data(book_data)
+                        scraped_books.append(book_data)
                         total_books_added += 1
             try:
+                for book in scraped_books:
+                    authors = set()
+                    for author in book["authors"]:
+                        authors.add(
+                            author_singleton.get_or_create_author(author, self.db)
+                        )
+                    book["authors"] = authors
+                    book_singleton.create_book(book, self.db)
                 self.db.commit()
                 print(f"Se han agregado {total_books_added} a la base de datos")
             except Exception as e:
