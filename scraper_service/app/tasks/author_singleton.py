@@ -35,7 +35,7 @@ class AuthorSingleton:
                     db.add(author)
                     db.flush()
                     return author
-                except (IntegrityError, UniqueViolation) as e:
+                except (IntegrityError, UniqueViolation):
                     savepoint.rollback()
                     author = db.query(Author).filter(Author.name == author_name).one()
                     return author
