@@ -1,0 +1,17 @@
+# setup-tools
+setuptools>=78.1.1
+
+# Framework de la API
+fastapi
+
+# Servidor ASGI
+uvicorn[standard]
+
+# ORM y Base de Datos
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Web Scraping
+requests
+beautifulsoup4
