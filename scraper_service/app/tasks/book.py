@@ -320,7 +320,7 @@ class BookScraper:
             if existing_book:
                 return None
         url = f"{BASE_URL}/books/{open_library_id}"
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url, headers=HEADERS, timeout=20)
         if response.status_code != 200:
             logging.error(f"Error al acceder a {url}: {response.status_code}")
             return None
